@@ -1,0 +1,21 @@
+# AWS Configuration
+aws_region   = "ap-south-1"
+environment  = "dev"
+project_name = "docpipeline"
+
+# Database Configuration
+db_username       = "docadmin"
+db_password       = "CHANGE_ME_secure_password_123"
+db_instance_class = "db.t3.micro"
+
+# ECS Configuration
+ecs_cpu           = 256
+ecs_memory        = 512
+ecs_desired_count = 1
+container_image   = "123456789012.dkr.ecr.ap-south-1.amazonaws.com/docpipeline-app:latest"
+
+# Authentication
+jwt_secret = "CHANGE_ME_your_jwt_secret_here"
+
+# Monitoring
+alert_email = "your-email@example.com"

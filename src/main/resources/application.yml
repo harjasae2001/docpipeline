@@ -1,0 +1,82 @@
+spring:
+  application:
+    name: docpipeline
+  datasource:
+    url: jdbc:postgresql://localhost:5432/docpipeline
+    username: ${DB_USERNAME:docpipeline}
+    password: ${DB_PASSWORD:docpipeline}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 300000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: false
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+app:
+  aws:
+    region: ${AWS_REGION:ap-south-1}
+    s3:
+      bucket-name: ${S3_BUCKET_NAME:docpipeline-documents}
+      presigned-url-expiration: 15m
+    kms:
+      key-id: ${KMS_KEY_ID:alias/docpipeline-key}
+    sqs:
+      queue-name: ${SQS_QUEUE_NAME:docpipeline-s3-events}
+  jwt:
+    secret: ${JWT_SECRET:7c9e8f1a2b3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f}
+    expiration: 86400000
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:3000
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+    com.docpipeline: DEBUG
+    org.springframework.security: INFO
+    software.amazon.awssdk: WARN
+    org.hibernate.SQL: DEBUG
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+---
+# Local development profile — points all AWS SDK calls to LocalStack
+spring:
+  config:
+    activate:
+      on-profile: local
+
+app:
+  aws:
+    endpoint-override: http://localhost:4566
