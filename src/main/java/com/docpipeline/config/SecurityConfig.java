@@ -3,14 +3,11 @@ package com.docpipeline.config;
 import com.docpipeline.auth.JwtAuthFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -24,10 +21,13 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    // @Lazy breaks the cycle: SecurityConfig is constructed first without requiring
+    // JwtAuthFilter, which in turn requires AuthService, which needs AuthenticationManager.
+    // The filter is only resolved when the SecurityFilterChain bean is built.
     private final JwtAuthFilter jwtAuthFilter;
     private final AppProperties appProperties;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter, AppProperties appProperties) {
+    public SecurityConfig(@Lazy JwtAuthFilter jwtAuthFilter, AppProperties appProperties) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.appProperties = appProperties;
     }
@@ -52,16 +52,6 @@ public class SecurityConfig {
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
-    }
-
-    @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
-        return config.getAuthenticationManager();
-    }
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
     }
 
     @Bean
