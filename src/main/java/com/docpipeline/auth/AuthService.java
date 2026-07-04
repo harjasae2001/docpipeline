@@ -7,9 +7,7 @@ import com.docpipeline.user.User;
 import com.docpipeline.user.UserRepository;
 import com.docpipeline.user.UserRole;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -24,16 +22,16 @@ public class AuthService implements UserDetailsService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
-    private final AuthenticationManager authenticationManager;
 
+    // AuthenticationManager is NOT injected here — it internally depends on UserDetailsService
+    // (which is this class), creating an unsolvable circular dependency.
+    // Instead, we authenticate manually via PasswordEncoder, which is equivalent.
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
-                       JwtTokenProvider jwtTokenProvider,
-                       AuthenticationManager authenticationManager) {
+                       JwtTokenProvider jwtTokenProvider) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
-        this.authenticationManager = authenticationManager;
     }
 
     @Transactional
@@ -56,11 +54,15 @@ public class AuthService implements UserDetailsService {
     }
 
     public AuthResponse login(LoginRequest request) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.email(), request.password())
-        );
+        // Load user manually — equivalent to what AuthenticationManager.authenticate() does internally
+        User user = userRepository.findByEmail(request.email())
+                .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
 
-        User user = (User) authentication.getPrincipal();
+        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            log.warn("Failed login attempt for email: {}", request.email());
+            throw new BadCredentialsException("Invalid email or password");
+        }
+
         String token = jwtTokenProvider.generateToken(user);
         log.info("User logged in successfully: {}", user.getEmail());
 
