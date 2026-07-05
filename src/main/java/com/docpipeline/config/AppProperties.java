@@ -19,18 +19,7 @@ public class AppProperties {
     @Setter
     public static class Aws {
         private String region = "ap-south-1";
-        /**
-         * Endpoint for SDK API calls (HeadObject, DeleteObject, SQS, KMS etc.).
-         * When running in Docker: http://localstack:4566 (container hostname).
-         * When running locally:   http://localhost:4566.
-         */
-        private String endpointOverride;
-        /**
-         * Endpoint embedded inside presigned URLs returned to the browser.
-         * Must always be reachable from the browser: http://localhost:4566.
-         * Defaults to endpointOverride when not set (suitable for local-only dev).
-         */
-        private String presignerEndpointOverride;
+        private String endpointOverride; // set to http://localhost:4566 for LocalStack
         private S3 s3 = new S3();
         private Kms kms = new Kms();
         private Sqs sqs = new Sqs();

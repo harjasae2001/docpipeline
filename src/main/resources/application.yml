@@ -71,9 +71,7 @@ springdoc:
     operations-sorter: method
 
 ---
-# ─── local profile ────────────────────────────────────────────────────────────
-# Use when running Spring Boot directly on your machine (mvnw spring-boot:run).
-# Both S3Client and S3Presigner point to localhost:4566 — browser can reach it.
+# Local development profile — points all AWS SDK calls to LocalStack
 spring:
   config:
     activate:
@@ -82,25 +80,3 @@ spring:
 app:
   aws:
     endpoint-override: http://localhost:4566
-    # presigner-endpoint-override not needed — falls back to endpoint-override
-
----
-# ─── docker profile ───────────────────────────────────────────────────────────
-# Use when running Spring Boot inside Docker Compose.
-# S3Client  → localstack:4566  (container-to-container, Docker network hostname)
-# S3Presigner → localhost:4566 (browser-accessible; presigned URLs go to the browser)
-spring:
-  config:
-    activate:
-      on-profile: docker
-  datasource:
-    # Use Docker Compose service name instead of localhost
-    url: jdbc:postgresql://postgres:5432/docpipeline
-
-app:
-  aws:
-    endpoint-override: http://localstack:4566
-    presigner-endpoint-override: http://localhost:4566
-  cors:
-    # Allow frontend running on host machine to call dockerised backend
-    allowed-origins: http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173

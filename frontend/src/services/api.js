@@ -1,10 +1,7 @@
 import axios from 'axios';
 
 const apiClient = axios.create({
-  // VITE_API_BASE_URL can be set in frontend/.env or frontend/.env.local
-  // Default: http://localhost:8080/api  (works for both local and dockerised backend,
-  //          since port 8080 is always mapped to the host)
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api',
+  baseURL: 'http://localhost:8080/api',
   headers: {
     'Content-Type': 'application/json',
   },

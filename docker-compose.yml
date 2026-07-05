@@ -12,8 +12,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - docpipeline-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-docpipeline}"]
       interval: 10s
@@ -34,50 +32,12 @@ services:
       - localstack_data:/var/lib/localstack
       - ./scripts/localstack-setup.sh:/etc/localstack/init/ready.d/localstack-setup.sh:ro
       - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - docpipeline-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
       interval: 15s
       timeout: 10s
       retries: 5
       start_period: 30s
-
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: docpipeline-backend
-    ports:
-      - "8080:8080"
-    environment:
-      SPRING_PROFILES_ACTIVE: docker
-      DB_USERNAME: ${DB_USERNAME:-docpipeline}
-      DB_PASSWORD: ${DB_PASSWORD:-docpipeline}
-      AWS_ACCESS_KEY_ID: test
-      AWS_SECRET_ACCESS_KEY: test
-      AWS_REGION: ap-south-1
-      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-docpipeline-documents}
-      KMS_KEY_ID: ${KMS_KEY_ID:-alias/docpipeline-key}
-      SQS_QUEUE_NAME: ${SQS_QUEUE_NAME:-docpipeline-s3-events}
-      JWT_SECRET: ${JWT_SECRET:-7c9e8f1a2b3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      localstack:
-        condition: service_healthy
-    networks:
-      - docpipeline-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
-      interval: 20s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-
-networks:
-  docpipeline-net:
-    driver: bridge
 
 volumes:
   postgres_data:
