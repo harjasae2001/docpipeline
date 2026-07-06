@@ -10,6 +10,7 @@ import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.textract.TextractClient;
+import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 
 import java.net.URI;
 
@@ -85,6 +86,22 @@ public class AwsConfig {
         } else {
             builder.credentialsProvider(DefaultCredentialsProvider.create());
         }
+        return builder.build();
+    }
+
+    @Bean
+    public SqsAsyncClient sqsAsyncClient() {
+        var builder = SqsAsyncClient.builder()
+                .region(Region.of(appProperties.getAws().getRegion()));
+
+        if (isLocalStack()) {
+            builder.endpointOverride(endpointUri())
+                    .credentialsProvider(StaticCredentialsProvider.create(
+                            AwsBasicCredentials.create("test", "test")));
+        } else {
+            builder.credentialsProvider(DefaultCredentialsProvider.create());
+        }
+
         return builder.build();
     }
 }
