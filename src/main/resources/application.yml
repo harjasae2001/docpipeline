@@ -1,6 +1,17 @@
 spring:
+  main:
+    allow-circular-references: true
   application:
     name: docpipeline
+  cloud:
+    aws:
+      region:
+        static: ap-south-1
+      sqs:
+        region: ap-south-1
+      credentials:
+        access-key: test
+        secret-key: test
   datasource:
     url: jdbc:postgresql://localhost:5432/docpipeline
     username: ${DB_USERNAME:docpipeline}
