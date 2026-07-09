@@ -9,6 +9,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.textract.TextractClient;
@@ -96,7 +97,10 @@ public class AwsConfig {
         if (isLocalStack()) {
             builder.endpointOverride(endpointUri())
                     .credentialsProvider(StaticCredentialsProvider.create(
-                            AwsBasicCredentials.create("test", "test")));
+                            AwsBasicCredentials.create("test", "test")))
+                    .serviceConfiguration(S3Configuration.builder()
+                    .pathStyleAccessEnabled(true)
+                    .build());
         } else {
             builder.credentialsProvider(DefaultCredentialsProvider.create());
         }
