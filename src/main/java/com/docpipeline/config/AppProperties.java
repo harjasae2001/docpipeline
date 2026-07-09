@@ -54,6 +54,6 @@ public class AppProperties {
     @Getter
     @Setter
     public static class Cors {
-        private String allowedOrigins = "http://localhost:5173,http://localhost:3000";
+        private String allowedOrigins = "http://localhost:5173";
     }
 }
