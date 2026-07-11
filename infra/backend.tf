@@ -9,6 +9,6 @@ terraform {
     key            = "docpipeline/terraform.tfstate"
     region         = "ap-south-1"
     encrypt        = true
-    dynamodb_table = "docpipeline-terraform-locks"
+    use_lockfile = "docpipeline-terraform-locks"
   }
 }

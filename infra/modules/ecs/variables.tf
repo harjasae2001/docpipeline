@@ -36,6 +36,9 @@ variable "ecs_sg_id" {
 variable "container_image" {
   description = "Docker container image for the application"
   type        = string
+  # Placeholder used on first apply before the real image is pushed to ECR.
+  # After pushing: terraform apply -var='container_image=<ecr-url>:latest'
+  default     = "public.ecr.aws/amazonlinux/amazonlinux:latest"
 }
 
 variable "cpu" {

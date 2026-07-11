@@ -59,12 +59,13 @@ variable "ecs_memory" {
 variable "ecs_desired_count" {
   description = "Desired number of ECS tasks"
   type        = number
-  default     = 1
+  default     = 0
 }
 
 variable "container_image" {
   description = "Docker image for the ECS task (use ECR URL after initial push)"
   type        = string
+  default     = "public.ecr.aws/amazonlinux/amazonlinux:latest"
 }
 
 variable "jwt_secret" {
