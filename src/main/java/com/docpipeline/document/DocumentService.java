@@ -68,8 +68,13 @@ public class DocumentService {
 
         long fileSize = s3StorageService.getObjectSize(document.getS3Key());
         document.setFileSize(fileSize);
-        document.setStatus(DocumentStatus.UPLOADED);
-        document.setUploadedAt(LocalDateTime.now());
+        
+        if (document.getStatus() == DocumentStatus.PENDING_UPLOAD) {
+            document.setStatus(DocumentStatus.UPLOADED);
+        }
+        if (document.getUploadedAt() == null) {
+            document.setUploadedAt(LocalDateTime.now());
+        }
 
         document = documentRepository.save(document);
         customMetrics.recordUpload();

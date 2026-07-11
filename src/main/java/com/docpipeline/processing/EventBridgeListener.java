@@ -60,7 +60,7 @@ public class EventBridgeListener {
             Optional<Document> documentOpt = documentRepository.findByS3Key(objectKey);
             if (documentOpt.isPresent()) {
                 Document document = documentOpt.get();
-                if (document.getStatus() == DocumentStatus.UPLOADED) {
+                if (document.getStatus() == DocumentStatus.UPLOADED || document.getStatus() == DocumentStatus.PENDING_UPLOAD) {
                     log.info("Starting Textract processing for document {}", document.getId());
                     textractService.processDocument(document);
                 } else {

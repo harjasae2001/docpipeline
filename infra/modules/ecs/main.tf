@@ -278,6 +278,7 @@ resource "aws_ecs_task_definition" "app" {
       ]
 
       environment = [
+        { name = "SPRING_PROFILES_ACTIVE", value = "prod" },
         { name = "DB_HOST", value = var.db_host },
         { name = "DB_PORT", value = var.db_port },
         { name = "DB_NAME", value = var.db_name },

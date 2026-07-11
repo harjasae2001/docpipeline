@@ -1,6 +1,4 @@
 spring:
-  main:
-    allow-circular-references: true
   application:
     name: docpipeline
   cloud:
@@ -9,9 +7,6 @@ spring:
         static: ap-south-1
       sqs:
         region: ap-south-1
-      credentials:
-        access-key: test
-        secret-key: test
   datasource:
     url: jdbc:postgresql://localhost:5432/docpipeline
     username: ${DB_USERNAME:docpipeline}
@@ -82,11 +77,28 @@ springdoc:
     operations-sorter: method
 
 ---
-# Local development profile — points all AWS SDK calls to LocalStack
+# ─── prod profile ─────────────────────────────────────────────────────────────
+# Uses real AWS services. All config comes from environment variables injected
+# by the ECS task definition.
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+---
+# ─── local profile ─────────────────────────────────────────────────────────────
+# LocalStack — test/test credentials override IAM resolution.
 spring:
   config:
     activate:
       on-profile: local
+  cloud:
+    aws:
+      credentials:
+        access-key: test
+        secret-key: test
+      sqs:
+        endpoint: http://localhost:4566
 
 app:
   aws:

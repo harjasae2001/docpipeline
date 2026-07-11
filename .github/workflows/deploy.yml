@@ -8,10 +8,10 @@ on:
 
 env:
   AWS_REGION: ap-south-1
-  ECR_REPOSITORY: docpipeline
-  ECS_CLUSTER: docpipeline-dev
-  ECS_SERVICE: docpipeline-dev
-  CONTAINER_NAME: docpipeline
+  ECR_REPOSITORY: docpipeline-app-dev        # matches aws_ecr_repository name in Terraform
+  ECS_CLUSTER: docpipeline-cluster-dev       # matches aws_ecs_cluster name in Terraform
+  ECS_SERVICE: docpipeline-service-dev       # matches aws_ecs_service name in Terraform
+  CONTAINER_NAME: docpipeline-app            # matches container name in task definition
 
 jobs:
   test:
