@@ -1,9 +1,3 @@
-=============================================================================
-Terraform Remote State Backend Configuration
-=============================================================================
-Uncomment the following block after creating the S3 bucket and DynamoDB table
-for Terraform remote state management.
-
 Prerequisites:
   1. Create S3 bucket:  aws s3api create-bucket --bucket docpipeline-terraform-state --region ap-south-1 --create-bucket-configuration LocationConstraint=ap-south-1
   2. Enable versioning: aws s3api put-bucket-versioning --bucket docpipeline-terraform-state --versioning-configuration Status=Enabled
