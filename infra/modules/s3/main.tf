@@ -39,7 +39,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
 
     transition {
       days          = 30
-      storage_class = "GLACIER_DEEP_ARCHIVE"
+      storage_class = "DEEP_ARCHIVE"
     }
   }
 
