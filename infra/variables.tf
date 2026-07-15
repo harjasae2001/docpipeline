@@ -59,7 +59,7 @@ variable "ecs_memory" {
 variable "ecs_desired_count" {
   description = "Desired number of ECS tasks"
   type        = number
-  default     = 0
+  default     = 1
 }
 
 variable "container_image" {
