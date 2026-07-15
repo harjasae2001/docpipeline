@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const apiClient = axios.create({
-  baseURL: 'http://localhost:8080/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'docpipeline-alb-dev-723416529.ap-south-1.elb.amazonaws.com/api',
   headers: {
     'Content-Type': 'application/json',
   },
