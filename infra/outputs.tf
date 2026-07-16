@@ -10,7 +10,7 @@ output "ecr_repository_url" {
 
 output "rds_endpoint" {
   description = "RDS instance endpoint"
-  value       = module.rds.endpoint
+  value       = module.rds.address
   sensitive   = true
 }
 
