@@ -8,7 +8,7 @@ spring:
       sqs:
         region: ap-south-1
   datasource:
-    url: jdbc:postgresql://localhost:5432/docpipeline
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:docpipeline}
     username: ${DB_USERNAME:docpipeline}
     password: ${DB_PASSWORD:docpipeline}
     driver-class-name: org.postgresql.Driver

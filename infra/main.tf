@@ -77,7 +77,7 @@ module "ecs" {
   cpu                = var.ecs_cpu
   memory             = var.ecs_memory
   desired_count      = var.ecs_desired_count
-  db_host            = module.rds.endpoint
+  db_host            = module.rds.address
   db_port            = module.rds.port
   db_name            = module.rds.db_name
   db_username        = var.db_username
