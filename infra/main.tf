@@ -115,4 +115,5 @@ module "frontend" {
 
   project_name = var.project_name
   environment  = var.environment
+  alb_dns_name = module.ecs.alb_dns_name # proxy /api/* through CloudFront → ALB (fixes Mixed Content)
 }
