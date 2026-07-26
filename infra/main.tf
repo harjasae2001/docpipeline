@@ -106,3 +106,13 @@ module "monitoring" {
   alb_arn_suffix   = module.ecs.alb_arn_suffix
   dlq_name         = split("/", module.eventbridge.dlq_url)[length(split("/", module.eventbridge.dlq_url)) - 1]
 }
+
+# -----------------------------------------------------------------------------
+# Frontend - S3 + CloudFront for React/Vite static hosting
+# -----------------------------------------------------------------------------
+module "frontend" {
+  source = "./modules/frontend"
+
+  project_name = var.project_name
+  environment  = var.environment
+}
