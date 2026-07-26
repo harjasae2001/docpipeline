@@ -3,6 +3,7 @@ package com.docpipeline.config;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -50,45 +51,52 @@ public class AwsConfig {
         return builder.build();
     }
 
+    /**
+     * LOCAL DEVELOPMENT ONLY — Creates and configures the S3 bucket in LocalStack
+     * on startup, since LocalStack does not persist state between restarts.
+     *
+     * In production (ECS), this bean is NOT created. The S3 bucket is provisioned
+     * and owned by Terraform. The application only reads/writes objects; it never
+     * creates, deletes, or reconfigures the bucket itself.
+     *
+     * CORS for the production bucket is managed by the Terraform S3 module.
+     */
     @Bean
+    @Profile("local")
     public ApplicationRunner initializeS3Bucket(S3Client s3Client) {
         return args -> {
-            String bucketName = "docpipeline-documents";
+            String bucketName = appProperties.getAws().getS3().getBucketName();
 
             try {
-                // Ensure the bucket exists (essential for LocalStack environments)
                 try {
                     s3Client.headBucket(HeadBucketRequest.builder().bucket(bucketName).build());
+                    System.out.println("S3 bucket already exists (LocalStack): " + bucketName);
                 } catch (NoSuchBucketException e) {
                     s3Client.createBucket(CreateBucketRequest.builder().bucket(bucketName).build());
-                    System.out.println("Created missing local S3 bucket: " + bucketName);
+                    System.out.println("Created S3 bucket in LocalStack: " + bucketName);
                 }
 
-                // Define the CORS Configuration rules
+                // LocalStack CORS — allows the Vite dev server to make PUT requests
                 CORSRule corsRule = CORSRule.builder()
-                        .allowedOrigins("http://localhost:5173")
-                        .allowedMethods("PUT", "POST", "GET", "HEAD")
+                        .allowedOrigins("http://localhost:5173", "http://localhost:3000")
+                        .allowedMethods("PUT", "POST", "GET", "HEAD", "DELETE")
                         .allowedHeaders("*")
                         .exposeHeaders("ETag")
                         .build();
 
-                CORSConfiguration corsConfig = CORSConfiguration.builder()
-                        .corsRules(corsRule)
-                        .build();
-
-                // Apply the CORS rules directly to the initialized bucket
                 s3Client.putBucketCors(PutBucketCorsRequest.builder()
                         .bucket(bucketName)
-                        .corsConfiguration(corsConfig)
+                        .corsConfiguration(CORSConfiguration.builder().corsRules(corsRule).build())
                         .build());
 
-                System.out.println("Successfully configured S3 bucket CORS for LocalStack.");
+                System.out.println("Configured LocalStack S3 CORS for bucket: " + bucketName);
 
             } catch (Exception e) {
-                System.err.println("Failed to initialize S3 settings: " + e.getMessage());
+                System.err.println("[LOCAL] Failed to initialize S3 bucket: " + e.getMessage());
             }
         };
     }
+
 
     @Bean
     public S3Presigner s3Presigner() {
