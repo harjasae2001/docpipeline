@@ -1,5 +1,5 @@
 output "address" {
-  description = "RDS instance endpoint"
+  description = "RDS instance hostname only (no port) — use with the port output to build the JDBC URL"
   value       = aws_db_instance.main.address
 }
 

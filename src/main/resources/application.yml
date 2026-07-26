@@ -84,6 +84,12 @@ spring:
   config:
     activate:
       on-profile: prod
+  datasource:
+    hikari:
+      connection-timeout: 10000        # fail fast: 10s instead of default 30s
+      initialization-fail-timeout: 1   # fail immediately if pool cannot init
+      maximum-pool-size: 5             # conservative for db.t3.micro
+      minimum-idle: 2
 
 ---
 # ─── local profile ─────────────────────────────────────────────────────────────
