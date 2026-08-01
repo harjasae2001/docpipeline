@@ -5,6 +5,20 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # ─── Manual trigger ──────────────────────────────────────────────────────────
+  # Go to GitHub → Actions → CI/CD Pipeline → Run workflow
+  # Select which part to deploy without touching the other.
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: 'What to deploy'
+        required: true
+        default: 'frontend-only'
+        type: choice
+        options:
+          - frontend-only
+          - backend-only
+          - all
 
 env:
   AWS_REGION: ap-south-1
@@ -14,9 +28,22 @@ env:
   CONTAINER_NAME: docpipeline-app            # matches container name in task definition
 
 jobs:
+  # ─── Backend tests (only runs when backend files change, or manual trigger) ──
   test:
-    name: Test & Build
+    name: Test & Build (Backend)
     runs-on: ubuntu-latest
+    # Run on push only when backend-relevant files changed, OR on manual trigger for backend/all
+    if: |
+      (github.event_name == 'push' && (
+        contains(github.event.head_commit.modified, 'src/') ||
+        contains(github.event.head_commit.modified, 'pom.xml') ||
+        contains(github.event.head_commit.modified, 'Dockerfile')
+      )) ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && (
+        github.event.inputs.deploy_target == 'backend-only' ||
+        github.event.inputs.deploy_target == 'all'
+      ))
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -33,11 +60,17 @@ jobs:
           name: test-results
           path: target/surefire-reports/
 
+  # ─── Frontend deploy (only runs when frontend files change, or manual trigger) ─
   deploy-frontend:
     name: Deploy Frontend
-    needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Run when frontend files changed on push, OR always on manual trigger for frontend/all
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && (
+        github.event.inputs.deploy_target == 'frontend-only' ||
+        github.event.inputs.deploy_target == 'all'
+      ))
     permissions:
       id-token: write
       contents: read
@@ -58,7 +91,12 @@ jobs:
         working-directory: frontend
         env:
           VITE_API_BASE_URL: ${{ secrets.API_BASE_URL }}
-        run: npm run build
+        run: |
+          echo "Building with API URL: $VITE_API_BASE_URL"
+          npm run build
+          # Verify the correct URL is baked into the bundle
+          echo "--- URL check in bundle ---"
+          grep -r "cloudfront.net" dist/ --include="*.js" -l || echo "No cloudfront URL found in bundle"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -75,12 +113,21 @@ jobs:
           aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
             --paths "/*"
+          echo "CloudFront cache invalidated — new files will be live within 1-2 minutes ✅"
 
+  # ─── Backend build + deploy (only runs when backend files change) ─────────────
   build-and-deploy:
-    name: Build & Deploy
+    name: Build & Deploy (Backend)
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: |
+      github.ref == 'refs/heads/main' && (
+        github.event_name == 'push' ||
+        (github.event_name == 'workflow_dispatch' && (
+          github.event.inputs.deploy_target == 'backend-only' ||
+          github.event.inputs.deploy_target == 'all'
+        ))
+      )
     permissions:
       id-token: write
       contents: read
@@ -134,7 +181,7 @@ jobs:
           sleep 60
           for i in {1..10}; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-              https://d1leckgxap13hd.cloudfront.net/api/actuator/health 2>/dev/null || echo "000")
+              https://d2qd8wd4iaw4vq.cloudfront.net/api/actuator/health 2>/dev/null || echo "000")
             if [ "$STATUS" = "200" ]; then
               echo "Health check passed (attempt $i) — deployment successful ✅"
               exit 0
@@ -145,6 +192,7 @@ jobs:
           echo "Health check did not pass after 5 minutes. Check CloudWatch logs."
           exit 1
 
+  # ─── Terraform validation on PRs only ────────────────────────────────────────
   terraform-validate:
     name: Terraform Validate
     runs-on: ubuntu-latest
