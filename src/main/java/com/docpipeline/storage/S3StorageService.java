@@ -28,12 +28,17 @@ public class S3StorageService {
 
     public String generatePresignedPutUrl(String s3Key, String contentType, Duration expiration) {
         try {
+            // NOTE: Do NOT include serverSideEncryption() or ssekmsKeyId() here.
+            // Including SSE headers in a pre-signed PUT URL forces the browser to send
+            // x-amz-server-side-encryption and x-amz-server-side-encryption-aws-kms-key-id
+            // headers in the XHR request, which causes a 403 when they are omitted.
+            // KMS encryption is enforced automatically by the S3 bucket's default
+            // encryption policy (configured in Terraform), so the client does not need
+            // to request it explicitly.
             PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                     .bucket(appProperties.getAws().getS3().getBucketName())
                     .key(s3Key)
                     .contentType(contentType)
-                    .serverSideEncryption(ServerSideEncryption.AWS_KMS)
-                    .ssekmsKeyId(appProperties.getAws().getKms().getKeyId())
                     .build();
 
             PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
