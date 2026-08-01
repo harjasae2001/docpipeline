@@ -50,6 +50,7 @@ function FileUpload({ onUploadComplete }) {
       // Step 1: Get presigned URL
       const { data } = await getPresignedUrl(file.name, file.type);
       const { uploadUrl, documentId } = data;
+      console.log(uploadUrl);
       // Step 2: Upload to S3
       await uploadToS3(uploadUrl, file, file.type, (percent) => {
         setProgress(percent);
