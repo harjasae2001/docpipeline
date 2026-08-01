@@ -332,8 +332,8 @@ resource "aws_lb_target_group" "app" {
 
   health_check {
     enabled             = true
-    healthy_threshold   = 3
-    unhealthy_threshold = 3
+    healthy_threshold   = 2
+    unhealthy_threshold = 5           # 5 × 30s = 150s before marked unhealthy (app needs ~140s to start)
     timeout             = 10
     interval            = 30
     path                = "/actuator/health"
@@ -366,6 +366,11 @@ resource "aws_ecs_service" "app" {
   task_definition = aws_ecs_task_definition.app.arn
   desired_count   = var.desired_count
   launch_type     = "FARGATE"
+
+  # Grace period: ALB health checks are ignored for this many seconds after a
+  # task starts. The app takes ~140s to start (JPA + Flyway + Spring context).
+  # Without this, the ALB kills the task before it's ready.
+  health_check_grace_period_seconds = 180
 
   network_configuration {
     subnets          = var.private_subnet_ids
