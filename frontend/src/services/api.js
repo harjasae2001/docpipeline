@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://d1leckgxap13hd.cloudfront.net/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://d2qd8wd4iaw4vq.cloudfront.net/api',
   headers: {
     'Content-Type': 'application/json',
   },
