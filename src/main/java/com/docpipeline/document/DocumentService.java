@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.UUID;
 
 @Service
@@ -73,7 +74,7 @@ public class DocumentService {
             document.setStatus(DocumentStatus.UPLOADED);
         }
         if (document.getUploadedAt() == null) {
-            document.setUploadedAt(LocalDateTime.now());
+            document.setUploadedAt(LocalDateTime.now(ZoneId.of("Asia/Kolkata")));
         }
 
         document = documentRepository.save(document);
