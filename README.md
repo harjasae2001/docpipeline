@@ -2,9 +2,9 @@
 
 DocPipeline is a secure, event-driven document ingestion service that uploads files directly to object storage, extracts structured content with AWS Textract, and exposes results through an authenticated API and React UI.
 
-[![CI](https://github.com/OWNER/REPOSITORY/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPOSITORY/actions/workflows/ci.yml) [![Java 21](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://adoptium.net/) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/harjasae2001/docpipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/harjasae2001/docpipeline/actions/workflows/ci.yml) [![Java 21](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://adoptium.net/) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> Replace `OWNER/REPOSITORY` in the CI badge after publishing or forking the repository.
+> Replace `OWNER/REPOSITORY` in the CI badge after forking the repository.
 
 ## What it solves
 
