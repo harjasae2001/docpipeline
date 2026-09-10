@@ -3,13 +3,13 @@ package com.docpipeline.document;
 import com.docpipeline.document.dto.DocumentResponse;
 import com.docpipeline.document.dto.PresignedUrlRequest;
 import com.docpipeline.document.dto.PresignedUrlResponse;
-import com.docpipeline.user.User;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,17 +29,17 @@ public class DocumentController {
     @PostMapping("/presigned-url")
     public ResponseEntity<PresignedUrlResponse> requestPresignedUrl(
             @Valid @RequestBody PresignedUrlRequest request,
-            @AuthenticationPrincipal User user) {
+            @AuthenticationPrincipal Jwt jwt) {
         PresignedUrlResponse response = documentService.requestUploadUrl(
-                request.fileName(), request.contentType(), user.getId());
+                request.fileName(), request.contentType(), userId(jwt));
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/{id}/confirm-upload")
     public ResponseEntity<DocumentResponse> confirmUpload(
             @PathVariable UUID id,
-            @AuthenticationPrincipal User user) {
-        DocumentResponse response = documentService.confirmUpload(id, user.getId());
+            @AuthenticationPrincipal Jwt jwt) {
+        DocumentResponse response = documentService.confirmUpload(id, userId(jwt));
         return ResponseEntity.ok(response);
     }
 
@@ -47,25 +47,25 @@ public class DocumentController {
     public ResponseEntity<Page<DocumentResponse>> listDocuments(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @AuthenticationPrincipal User user) {
+            @AuthenticationPrincipal Jwt jwt) {
         Pageable pageable = PageRequest.of(page, size);
-        Page<DocumentResponse> documents = documentService.listDocuments(user.getId(), pageable);
+        Page<DocumentResponse> documents = documentService.listDocuments(userId(jwt), pageable);
         return ResponseEntity.ok(documents);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<DocumentResponse> getDocument(
             @PathVariable UUID id,
-            @AuthenticationPrincipal User user) {
-        DocumentResponse response = documentService.getDocument(id, user.getId());
+            @AuthenticationPrincipal Jwt jwt) {
+        DocumentResponse response = documentService.getDocument(id, userId(jwt));
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{id}/download-url")
     public ResponseEntity<Map<String, String>> getDownloadUrl(
             @PathVariable UUID id,
-            @AuthenticationPrincipal User user) {
-        String url = documentService.getDownloadUrl(id, user.getId());
+            @AuthenticationPrincipal Jwt jwt) {
+        String url = documentService.getDownloadUrl(id, userId(jwt));
         return ResponseEntity.ok(Map.of("url", url));
     }
 
@@ -73,7 +73,11 @@ public class DocumentController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteDocument(
             @PathVariable UUID id,
-            @AuthenticationPrincipal User user) {
-        documentService.deleteDocument(id, user.getId());
+            @AuthenticationPrincipal Jwt jwt) {
+        documentService.deleteDocument(id, userId(jwt));
+    }
+
+    private UUID userId(Jwt jwt) {
+        return UUID.fromString(jwt.getSubject());
     }
 }

@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { LogIn } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/auth-context';
 
 function LoginPage() {
   const [email, setEmail] = useState('');
@@ -13,8 +13,7 @@ function LoginPage() {
 
   // Redirect if already logged in
   if (isAuthenticated) {
-    navigate('/dashboard', { replace: true });
-    return null;
+    return <Navigate to="/dashboard" replace />;
   }
 
   const handleSubmit = async (e) => {
@@ -31,7 +30,7 @@ function LoginPage() {
       toast.success('Welcome back!');
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      const message = err?.response?.data?.message || 'Invalid credentials. Please try again.';
+      const message = err?.message || err?.response?.data?.message || 'Invalid credentials. Please try again.';
       toast.error(message);
     } finally {
       setLoading(false);

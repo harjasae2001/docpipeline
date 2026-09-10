@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { Upload, CheckCircle, AlertCircle, FileUp } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getPresignedUrl, uploadToS3, confirmUpload } from '../services/api';
+import { getPresignedUrl, uploadToStorage, confirmUpload } from '../services/api';
 
 const ACCEPTED_TYPES = {
   'application/pdf': '.pdf',
@@ -50,9 +50,8 @@ function FileUpload({ onUploadComplete }) {
       // Step 1: Get presigned URL
       const { data } = await getPresignedUrl(file.name, file.type);
       const { uploadUrl, documentId } = data;
-      console.log(uploadUrl);
-      // Step 2: Upload to S3
-      await uploadToS3(uploadUrl, file, file.type, (percent) => {
+      // Step 2: Upload directly to private Supabase Storage
+      await uploadToStorage(uploadUrl, file, file.type, (percent) => {
         setProgress(percent);
       });
 
@@ -157,6 +156,12 @@ function FileUpload({ onUploadComplete }) {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onClick={handleClick}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handleClick();
+        }
+      }}
       role="button"
       tabIndex={0}
       aria-label="Upload file"
@@ -169,7 +174,7 @@ function FileUpload({ onUploadComplete }) {
         accept={ACCEPTED_EXTENSIONS}
         onChange={handleFileSelect}
         style={{ display: 'none' }}
-        aria-hidden="true"
+      aria-label="Choose a document to upload"
       />
     </div>
   );

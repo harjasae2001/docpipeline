@@ -21,13 +21,16 @@ class DocumentRepositoryIntegrationTest {
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("docpipeline")
             .withUsername("docpipeline")
-            .withPassword("docpipeline");
+            .withPassword("docpipeline")
+            .withInitScript("db/test/init.sql");
 
     @DynamicPropertySource
     static void databaseProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.flyway.enabled", () -> "false");
+        registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
     }
 
     @Autowired DocumentRepository documentRepository;
@@ -39,7 +42,8 @@ class DocumentRepositoryIntegrationTest {
         document.setUserId(ownerId);
         document.setFileName("invoice.pdf");
         document.setContentType("application/pdf");
-        document.setS3Key("users/" + ownerId + "/invoice.pdf");
+        document.setStorageBucket("docpipeline-private");
+        document.setStorageKey("users/" + ownerId + "/invoice.pdf");
         Document saved = documentRepository.saveAndFlush(document);
 
         assertThat(documentRepository.findByIdAndUserId(saved.getId(), ownerId)).isPresent();

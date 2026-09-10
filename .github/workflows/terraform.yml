@@ -1,12 +1,7 @@
 name: Terraform
 
 on:
-  push:
-    branches: [main]
-    paths: ['infra/**']
-  pull_request:
-    branches: [main]
-    paths: ['infra/**']
+  workflow_dispatch: # legacy stack is retained for the rollback window
 
 jobs:
   terraform:

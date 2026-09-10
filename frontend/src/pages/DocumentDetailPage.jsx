@@ -5,7 +5,6 @@ import {
   Download,
   FileBarChart,
   FileText,
-  Clock,
   AlertTriangle,
   Loader2,
 } from 'lucide-react';
@@ -33,7 +32,7 @@ function DocumentDetailPage() {
       const { data } = await getDocument(id);
       setDocument(data);
       setError(null);
-    } catch (err) {
+    } catch {
       setError(err?.response?.data?.message || 'Failed to load document.');
       toast.error('Failed to load document details.');
     } finally {
@@ -60,7 +59,7 @@ function DocumentDetailPage() {
     try {
       const { data } = await getDownloadUrl(id);
       window.open(data.downloadUrl || data.url || data, '_blank');
-    } catch (err) {
+    } catch {
       toast.error('Failed to get download link.');
     }
   };

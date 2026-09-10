@@ -1,11 +1,7 @@
 name: Deploy Frontend
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'frontend/**'
-  workflow_dispatch: # manual trigger — GitHub → Actions → Deploy Frontend → Run workflow
+  workflow_dispatch: # rollback-only AWS deployment
 
 jobs:
   deploy-frontend:

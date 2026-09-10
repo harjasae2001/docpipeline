@@ -134,6 +134,11 @@ docker-compose.override.yml
 # AWS
 # ========================
 .aws/
+
+# Supabase / Vercel local state
+.supabase/
+.vercel/
+frontend/.vercel/
 *.pem
 
 # ========================

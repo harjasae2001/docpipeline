@@ -1,63 +1,71 @@
-import { createContext, useContext, useState, useCallback, useMemo } from 'react';
-import * as api from '../services/api';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
+import { AuthContext } from './auth-context';
 
-const AuthContext = createContext(null);
+function toAppUser(authUser) {
+  if (!authUser) return null;
+  return {
+    id: authUser.id,
+    email: authUser.email,
+    fullName: authUser.user_metadata?.full_name || authUser.email,
+  };
+}
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try {
-      const stored = localStorage.getItem('user');
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const [token, setToken] = useState(() => localStorage.getItem('token'));
-
-  const isAuthenticated = useMemo(() => !!token && !!user, [token, user]);
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!mounted) return;
+      if (error) console.error('Could not restore Supabase session', error);
+      setSession(data.session ?? null);
+      setLoading(false);
+    });
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setLoading(false);
+    });
+    return () => {
+      mounted = false;
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
 
   const login = useCallback(async (email, password) => {
-    const response = await api.login(email, password);
-    const { token: newToken, ...userData } = response.data;
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('user', JSON.stringify(userData));
-    setToken(newToken);
-    setUser(userData);
-    return response;
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
   }, []);
 
   const register = useCallback(async (email, password, fullName) => {
-    const response = await api.register(email, password, fullName);
-    const { token: newToken, ...userData } = response.data;
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('user', JSON.stringify(userData));
-    setToken(newToken);
-    setUser(userData);
-    return response;
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName } },
+    });
+    if (error) throw error;
+    return data;
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setToken(null);
-    setUser(null);
+  const logout = useCallback(async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   }, []);
 
-  const value = useMemo(
-    () => ({ user, token, isAuthenticated, login, register, logout }),
-    [user, token, isAuthenticated, login, register, logout]
-  );
+  const user = useMemo(() => toAppUser(session?.user), [session]);
+  const value = useMemo(() => ({
+    user,
+    token: session?.access_token ?? null,
+    isAuthenticated: Boolean(session?.access_token && session?.user),
+    loading,
+    login,
+    register,
+    logout,
+  }), [user, session, loading, login, register, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 }
 
 export default AuthContext;

@@ -1,8 +1,8 @@
 package com.docpipeline.report;
 
-import com.docpipeline.user.User;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -21,16 +21,16 @@ public class ReportController {
     @PostMapping("/{documentId}/generate")
     public ResponseEntity<Map<String, String>> generateReport(
             @PathVariable UUID documentId,
-            @AuthenticationPrincipal User user) {
-        String downloadUrl = reportService.generateReport(documentId, user.getId());
+            @AuthenticationPrincipal Jwt jwt) {
+        String downloadUrl = reportService.generateReport(documentId, UUID.fromString(jwt.getSubject()));
         return ResponseEntity.ok(Map.of("downloadUrl", downloadUrl));
     }
 
     @GetMapping("/{documentId}/download-url")
     public ResponseEntity<Map<String, String>> getReportDownloadUrl(
             @PathVariable UUID documentId,
-            @AuthenticationPrincipal User user) {
-        String downloadUrl = reportService.getReportDownloadUrl(documentId, user.getId());
+            @AuthenticationPrincipal Jwt jwt) {
+        String downloadUrl = reportService.getReportDownloadUrl(documentId, UUID.fromString(jwt.getSubject()));
         return ResponseEntity.ok(Map.of("downloadUrl", downloadUrl));
     }
 }

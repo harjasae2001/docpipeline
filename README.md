@@ -1,190 +1,97 @@
 # DocPipeline
 
-DocPipeline is a secure, event-driven document ingestion service that uploads files directly to object storage, extracts structured content with AWS Textract, and exposes results through an authenticated API and React UI.
+DocPipeline uploads documents directly to private object storage, processes CSV files in Java or PDFs/images with AWS Textract, and exposes owner-scoped document and report APIs through a React application.
 
-[![CI](https://github.com/harjasae2001/docpipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/harjasae2001/docpipeline/actions/workflows/ci.yml) [![Java 21](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://adoptium.net/) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-
-> Replace `OWNER/REPOSITORY` in the CI badge after forking the repository.
-
-## What it solves
-
-Teams receiving PDFs and images often have to build secure uploads, identity, durable storage, extraction, status tracking, and reporting before they can use the documents themselves. DocPipeline combines those concerns:
-
-- users upload directly to S3-compatible storage through short-lived presigned URLs;
-- the API records ownership and processing state in PostgreSQL;
-- EventBridge and SQS decouple uploads from extraction;
-- Textract extracts text, forms, and tables asynchronously;
-- users inspect results and generate JSON reports without receiving storage credentials.
-
-The application server does not proxy large upload bodies, and every document query is scoped to the authenticated owner.
-
-## Current status
-
-This is a working reference implementation, not a finished compliance product. PostgreSQL, JWT authentication, S3, SQS, Textract, Swagger, Docker, Terraform, and GitHub Actions are implemented. Redis is provided locally, but application caching is not wired yet. Request idempotency and explicit retry/backoff policies are hardening work described below, not completed features.
+The active target is a hybrid Supabase/Render/Vercel architecture. The legacy AWS application infrastructure remains in `infra/` only for rollback during migration acceptance.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    U[React SPA] -->|JWT REST calls| A[Spring Boot API]
-    A -->|users, documents, status| P[(PostgreSQL)]
-    A -.->|future cache / idempotency| R[(Redis)]
-    A -->|presigned URL| U
-    U -->|direct PUT| S[(S3 / LocalStack)]
-    S --> E[EventBridge]
-    E --> Q[SQS + DLQ]
-    Q --> W[Spring SQS listener]
-    W --> T[AWS Textract]
-    W --> P
-    A -->|presigned download| S
+```text
+Vercel React SPA
+       |-- Supabase Auth
+       v
+Render Spring Boot API ---- Supabase Postgres
+       |                    Supabase Storage
+       |                    Supabase Queues (pgmq)
+       v
+Render background worker
+       |-- CSV parser
+       `-- temporary AWS S3/KMS --> AWS Textract
 ```
 
-### Data flow
+Supabase is authoritative for identities, application rows, original files, reports, and queue state. AWS remains only for Textract and its encrypted lifecycle-managed staging bucket.
 
-1. The React client registers or signs in and receives a bearer JWT.
-2. It requests an upload URL. The API creates a `PENDING_UPLOAD` document and returns a 15-minute S3 presigned URL.
-3. The browser uploads directly to S3 and confirms the upload with the API.
-4. S3 emits an object-created event through EventBridge to SQS. The listener starts asynchronous Textract analysis.
-5. A scheduled worker polls active jobs every 30 seconds and stores text, JSON metadata, timestamps, and final status in PostgreSQL.
-6. The client reads document state or asks the API to write and sign a JSON report in S3.
+## Implemented migration
 
-Production Terraform covers VPC, RDS, ECS Fargate, S3/KMS, EventBridge/SQS, frontend hosting, and monitoring. Docker Compose runs PostgreSQL, Redis, and LocalStack locally.
+- Supabase Auth replaces the custom user table, BCrypt login service, and application-signed JWTs.
+- Spring Security validates Supabase JWKS tokens, issuer, audience, expiry, and UUID `sub` ownership.
+- Compatibility endpoints remain at `/api/auth/register`, `/api/auth/login`, `/api/auth/refresh`, and `/api/auth/logout`.
+- JPA uses the private `app` schema through the Supabase session pooler with TLS.
+- Supabase Storage keeps the direct browser PUT and 15-minute signed URL flow through its S3-compatible API.
+- Upload confirmation and `pgmq.send` share one database transaction.
+- The same Docker image runs as an `api` profile or a non-web `worker` profile.
+- CSV is parsed locally. PDF, JPEG, and PNG inputs are copied temporarily to encrypted AWS S3 for asynchronous Textract analysis.
+- Worker retries use delayed messages, bounded backoff, compare-and-set claims, a durable ledger, and an application-managed DLQ.
+- The original AWS Flyway migrations and Terraform remain available for the rollback window.
 
-### Trade-offs
+The provisioned non-production project is `docpipeline` (`ianwqptxwzbvwvehdmyd`) in `ap-south-1`. Its private schema, bucket, Auth profile trigger, `pgmq` extension, and both queues are installed.
 
-- Direct-to-S3 uploads save backend bandwidth but require browser CORS and a two-step upload/confirmation flow.
-- SQS provides buffering and a dead-letter queue, but delivery is at least once, so consumers must handle duplicates.
-- Textract polling is simple and recoverable, but adds latency and database scans. Event-driven completion scales better.
-- PostgreSQL is authoritative; Redis should contain only reproducible cache or short-lived idempotency data.
-- The scheduler runs in every API replica. Production should add distributed locking or use a dedicated worker.
-
-## Tech stack
+## Technology
 
 | Area | Technology |
 | --- | --- |
-| Backend | Java 21, Spring Boot 3.3, Spring MVC, Security, Data JPA |
-| Frontend | React 19, Vite 8, Axios |
-| Data | PostgreSQL 16, Flyway; Redis 7 local dependency (integration pending) |
-| AWS | S3, KMS, EventBridge, SQS/DLQ, Textract, ECS, RDS, CloudWatch |
-| API | OpenAPI 3 and Swagger UI via springdoc-openapi |
-| Delivery | Docker, Docker Compose, Terraform, GitHub Actions, ECR |
-| Quality | JUnit 5, Mockito, Spring Boot Test, Qodana, oxlint |
+| Backend | Java 21, Spring Boot 3.3, Security resource server, JPA |
+| Frontend | React 19, Vite 8, Supabase JS 2.112.4, Axios |
+| Supabase | Auth, Postgres, Storage S3 API, Queues/pgmq |
+| AWS retained | Textract, temporary S3, KMS, IAM, CloudWatch alarms |
+| Hosting | Render API + worker, Vercel SPA |
+| Delivery | Docker, GitHub Actions, Terraform |
 
-## Key engineering decisions
+## Configuration
 
-### Idempotent request handling
+Copy `.env.example` and `frontend/.env.example`, then supply secrets through your shell or deployment platform. The server needs the Supabase session-pooler JDBC connection, Supabase Storage S3 credentials, and—on the worker—least-privilege AWS staging credentials.
 
-The listener currently accepts only `PENDING_UPLOAD` or `UPLOADED` documents, and upload confirmation sets its timestamp once. This reduces duplicate work but is not safe against every concurrent redelivery.
+Never expose the Supabase secret key, database password, Storage S3 credentials, or AWS credentials through `VITE_*` variables. The browser receives only the project URL and publishable key.
 
-The intended production design is an `Idempotency-Key` on mutations, atomically reserved as `user + route + key` in Redis with a TTL and replayed response. Durable side effects also need a database uniqueness constraint. Event consumers should use compare-and-set status transitions or a processed-event table. Until implemented, clients should not assume all POST operations are fully idempotent.
+## Run and verify
 
-### JWT authentication and role-based access
-
-Spring Security is stateless. Auth, Swagger, and public health routes are open; other APIs require a signed bearer JWT. Passwords are BCrypt-hashed, users expose `ROLE_<role>`, and repository queries include the authenticated user ID.
-
-Tokens currently contain the email subject and expire after 24 hours. There is no refresh/revocation flow. Supply a unique 256-bit `JWT_SECRET` outside local development and add route-level role rules before administrative endpoints.
-
-### Retry and backoff for external APIs
-
-SQS supplies coarse retry behavior and locally moves messages to the DLQ after three receives. AWS clients otherwise use SDK defaults; the app has no explicit jitter, timeout budget, or circuit breaker. Production should use bounded exponential backoff with jitter for transient failures, avoid retrying validation/auth failures, emit retry/DLQ metrics, and expire abandoned Textract jobs.
-
-### Caching and invalidation
-
-PostgreSQL remains authoritative. Redis is in Compose so integration can be added without changing local topology, but the app currently performs no caching. A good first cache is document detail keyed by `userId:documentId` with a short TTL; evict after confirmation, processing transitions, report generation, and deletion. Avoid paginated-list caching initially. Never cache presigned URLs beyond their lifetime or cache document data without an owner-scoped key.
-
-## Run locally
-
-### Prerequisites
-
-- Java 21
-- Docker Engine with Docker Compose v2
-- Node.js 20+ and npm
-- Maven 3.9+ (the repository also includes the Unix `mvnw` script)
-
-### 1. Configure
+Backend API:
 
 ```powershell
-Copy-Item .env.example .env
+mvn test
+mvn spring-boot:run "-Dspring-boot.run.profiles=api,supabase"
 ```
 
-On Bash, use `cp .env.example .env`. `.env` is ignored by Git. Never commit real passwords, tokens, AWS keys, or Terraform variable files.
-
-### 2. Start dependencies
-
-```bash
-docker compose --env-file .env up -d
-docker compose ps
-```
-
-PostgreSQL listens on `5432`, Redis on `6379`, and LocalStack on `4566`. The bootstrap creates S3, KMS, SQS/DLQ, and EventBridge resources. LocalStack does not emulate every Textract workflow; full extraction may require AWS.
-
-### 3. Start the API
-
-PowerShell:
+Worker, using the same built artifact and environment:
 
 ```powershell
-Get-Content .env | ForEach-Object {
-  if ($_ -match '^[^#].*=') {
-    $name, $value = $_ -split '=', 2
-    Set-Item -Path "Env:$name" -Value $value
-  }
-}
-mvn spring-boot:run "-Dspring-boot.run.profiles=local"
+mvn spring-boot:run "-Dspring-boot.run.profiles=worker,supabase"
 ```
 
-Bash:
+Frontend:
 
-```bash
-set -a
-source .env
-set +a
-./mvnw spring-boot:run -Dspring-boot.run.profiles=local
-```
-
-The API listens on <http://localhost:8080>.
-
-### 4. Start the frontend
-
-```bash
+```powershell
 cd frontend
 npm ci
-VITE_API_BASE_URL=http://localhost:8080/api npm run dev
+npm run lint
+npm run dev
 ```
 
-PowerShell users can run `$env:VITE_API_BASE_URL = "http://localhost:8080/api"` before `npm run dev`. Open <http://localhost:5173>.
+The API is available at `http://localhost:8080`, Swagger at `/swagger-ui.html`, and health at `/actuator/health`. A local API/worker run needs either a local Supabase stack or credentials for the provisioned project; plain PostgreSQL alone does not provide Auth, Storage, or `pgmq`.
 
-### 5. Create sample data
+## Deployment and migration
 
-```bash
-curl -X POST http://localhost:8080/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"demo@example.com","password":"ChangeMe123!","fullName":"Demo User"}'
-```
+- [`render.yaml`](render.yaml) defines the Singapore API and worker services from one Dockerfile.
+- [`frontend/vercel.json`](frontend/vercel.json) provides Vite SPA routing.
+- `.github/workflows/deploy-render.yml` and `deploy-vercel.yml` build, test, and deploy the targets.
+- [`infra/textract-staging`](infra/textract-staging) is the minimal retained AWS Terraform stack.
+- Follow [`migration/README.md`](migration/README.md) for identity/data/object import, reconciliation, cutover, and rollback.
 
-Copy the returned token and request an upload:
+Legacy AWS workflows are manual rollback-only. Do not destroy that stack until acceptance is complete. Supabase database backups do not include Storage objects, so configure a separate scheduled object export before production cutover.
 
-```bash
-curl -X POST http://localhost:8080/api/documents/presigned-url \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"fileName":"sample.pdf","contentType":"application/pdf"}'
-```
+## Quality gates
 
-PUT a file to `uploadUrl`, then call `POST /api/documents/{documentId}/confirm-upload`. Migrations create schema only; there is no default user.
-
-Stop services with `docker compose down`. Use `docker compose down -v` only when intentionally deleting local volumes.
-
-## API documentation
-
-- Swagger UI: <http://localhost:8080/swagger-ui.html>
-- OpenAPI JSON: <http://localhost:8080/v3/api-docs>
-- Health: <http://localhost:8080/actuator/health>
-
-Main resource groups are `/api/auth`, `/api/documents`, and `/api/reports`. The generated OpenAPI document is the authoritative endpoint catalogue.
-
-## Quality
-
-```bash
+```powershell
 mvn verify
 cd frontend
 npm ci
@@ -192,25 +99,7 @@ npm run lint
 npm run build
 ```
 
-The `CI` workflow runs backend test/build and frontend lint/build on pushes and pull requests. Deployment workflows publish to ECR/ECS and S3/CloudFront from `main`; they require AWS OIDC and repository secrets. Qodana supplies static analysis. This repository does not currently guarantee a public deployment URL or coverage threshold.
-
-## Repository layout
-
-```text
-frontend/                 React/Vite client
-infra/                    Terraform root and AWS modules
-scripts/                  LocalStack bootstrap
-src/main/java/            Spring Boot application
-src/main/resources/       configuration and Flyway migrations
-src/test/java/            unit and integration tests
-.github/workflows/        CI, quality, Terraform, deployment
-docker-compose.yml        PostgreSQL, Redis, LocalStack
-Dockerfile                multi-stage backend image
-```
-
-## Contributing
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md). Bug and feature templates are under `.github/ISSUE_TEMPLATE`.
+Acceptance requires AWS baseline-success parity, successful PDF/JPEG/PNG/CSV flows, 100% row/object reconciliation, cross-user isolation, no exposed secrets, and empty unexplained queue/staging backlogs.
 
 ## License
 

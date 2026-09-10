@@ -3,6 +3,7 @@ package com.docpipeline.auth;
 import com.docpipeline.auth.dto.AuthResponse;
 import com.docpipeline.auth.dto.LoginRequest;
 import com.docpipeline.auth.dto.RegisterRequest;
+import com.docpipeline.auth.dto.RefreshRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,5 +29,19 @@ public class AuthController {
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshRequest request) {
+        return ResponseEntity.ok(authService.refresh(request.refreshToken()));
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(@RequestHeader("Authorization") String authorization) {
+        if (!authorization.startsWith("Bearer ")) {
+            throw new IllegalArgumentException("Missing bearer token");
+        }
+        authService.logout(authorization.substring(7));
     }
 }

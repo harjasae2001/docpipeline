@@ -14,27 +14,26 @@ function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const intervalRef = useRef(null);
 
-  const fetchDocuments = useCallback(async (pageNum = page) => {
+  const fetchDocuments = useCallback(async (pageNum, showError = true) => {
     try {
       const { data } = await listDocuments(pageNum, 12);
       setDocuments(data.content || []);
       setTotalPages(data.totalPages || 0);
       setTotalElements(data.totalElements || 0);
-    } catch (err) {
-      // Only show error toast if it's not a silent refresh
-      if (loading) {
+    } catch {
+      if (showError) {
         toast.error('Failed to load documents.');
       }
     } finally {
       setLoading(false);
     }
-  }, [page, loading]);
+  }, []);
 
   // Initial fetch and page change
   useEffect(() => {
     setLoading(true);
     fetchDocuments(page);
-  }, [page]);
+  }, [page, fetchDocuments]);
 
   // Auto-refresh when documents are processing
   useEffect(() => {
@@ -44,7 +43,7 @@ function DashboardPage() {
 
     if (hasProcessing) {
       intervalRef.current = setInterval(() => {
-        fetchDocuments(page);
+        fetchDocuments(page, false);
       }, 10000);
     }
 

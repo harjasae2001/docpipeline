@@ -1,13 +1,7 @@
 name: Deploy Backend
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'pom.xml'
-      - 'Dockerfile'
-  workflow_dispatch: # manual trigger — GitHub → Actions → Deploy Backend → Run workflow
+  workflow_dispatch: # rollback-only AWS deployment
 
 env:
   AWS_REGION: ap-south-1

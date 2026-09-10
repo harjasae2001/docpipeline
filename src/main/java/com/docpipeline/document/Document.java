@@ -7,11 +7,11 @@ import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "documents")
+@Table(name = "documents", schema = "app")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -33,8 +33,11 @@ public class Document {
     @Column(name = "file_size")
     private Long fileSize;
 
-    @Column(name = "s3_key", nullable = false, unique = true)
-    private String s3Key;
+    @Column(name = "storage_bucket", nullable = false)
+    private String storageBucket;
+
+    @Column(name = "storage_key", nullable = false, unique = true)
+    private String storageKey;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -42,6 +45,12 @@ public class Document {
 
     @Column(name = "textract_job_id")
     private String textractJobId;
+
+    @Column(name = "textract_staging_key")
+    private String textractStagingKey;
+
+    @Column(name = "last_error", columnDefinition = "TEXT")
+    private String lastError;
 
     @Column(name = "extracted_text", columnDefinition = "TEXT")
     private String extractedText;
@@ -51,16 +60,36 @@ public class Document {
     private String metadata;
 
     @Column(name = "uploaded_at")
-    private LocalDateTime uploadedAt;
+    private OffsetDateTime uploadedAt;
 
     @Column(name = "processed_at")
-    private LocalDateTime processedAt;
+    private OffsetDateTime processedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        createdAt = OffsetDateTime.now(java.time.ZoneOffset.UTC);
+        updatedAt = createdAt;
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = OffsetDateTime.now(java.time.ZoneOffset.UTC);
+    }
+
+    /** Compatibility alias for clients and migration utilities using the old name. */
+    @Deprecated
+    public String getS3Key() {
+        return storageKey;
+    }
+
+    @Deprecated
+    public void setS3Key(String key) {
+        this.storageKey = key;
     }
 }

@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { supabase } from '../lib/supabase';
 
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://d2qd8wd4iaw4vq.cloudfront.net/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -9,8 +10,9 @@ const apiClient = axios.create({
 
 // Request interceptor – attach Bearer token
 apiClient.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
+  async (config) => {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -22,25 +24,14 @@ apiClient.interceptors.request.use(
 // Response interceptor – handle 401
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      await supabase.auth.signOut();
       window.location.href = '/login';
     }
     return Promise.reject(error);
   }
 );
-
-// ─── Auth ────────────────────────────────────────────────────────────────────
-
-export function login(email, password) {
-  return apiClient.post('/auth/login', { email, password });
-}
-
-export function register(email, password, fullName) {
-  return apiClient.post('/auth/register', { email, password, fullName });
-}
 
 // ─── Documents ───────────────────────────────────────────────────────────────
 
@@ -78,9 +69,9 @@ export function getReportDownloadUrl(documentId) {
   return apiClient.get(`/reports/${documentId}/download-url`);
 }
 
-// ─── S3 Direct Upload ────────────────────────────────────────────────────────
+// ─── Direct Storage Upload ───────────────────────────────────────────────────
 
-export function uploadToS3(presignedUrl, file, contentType, onProgress) {
+export function uploadToStorage(presignedUrl, file, contentType, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', presignedUrl, true);

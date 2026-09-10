@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { UserPlus } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/auth-context';
 
 function RegisterPage() {
   const [fullName, setFullName] = useState('');
@@ -15,8 +15,7 @@ function RegisterPage() {
 
   // Redirect if already logged in
   if (isAuthenticated) {
-    navigate('/dashboard', { replace: true });
-    return null;
+    return <Navigate to="/dashboard" replace />;
   }
 
   const handleSubmit = async (e) => {
@@ -39,11 +38,16 @@ function RegisterPage() {
 
     setLoading(true);
     try {
-      await register(email, password, fullName);
-      toast.success('Account created successfully!');
-      navigate('/dashboard', { replace: true });
+      const data = await register(email, password, fullName);
+      if (data.session) {
+        toast.success('Account created successfully!');
+        navigate('/dashboard', { replace: true });
+      } else {
+        toast.success('Account created. Check your email to confirm your address.');
+        navigate('/login', { replace: true });
+      }
     } catch (err) {
-      const message = err?.response?.data?.message || 'Registration failed. Please try again.';
+      const message = err?.message || err?.response?.data?.message || 'Registration failed. Please try again.';
       toast.error(message);
     } finally {
       setLoading(false);

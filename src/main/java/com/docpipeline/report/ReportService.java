@@ -5,13 +5,10 @@ import com.docpipeline.document.Document;
 import com.docpipeline.document.DocumentRepository;
 import com.docpipeline.document.DocumentStatus;
 import com.docpipeline.exception.DocumentNotFoundException;
-import com.docpipeline.storage.S3StorageService;
+import com.docpipeline.storage.StorageService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -23,19 +20,16 @@ import java.util.UUID;
 public class ReportService {
 
     private final DocumentRepository documentRepository;
-    private final S3StorageService s3StorageService;
-    private final S3Client s3Client;
+    private final StorageService storageService;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
 
     public ReportService(DocumentRepository documentRepository,
-                         S3StorageService s3StorageService,
-                         S3Client s3Client,
+                         StorageService storageService,
                          AppProperties appProperties,
                          ObjectMapper objectMapper) {
         this.documentRepository = documentRepository;
-        this.s3StorageService = s3StorageService;
-        this.s3Client = s3Client;
+        this.storageService = storageService;
         this.appProperties = appProperties;
         this.objectMapper = objectMapper;
     }
@@ -63,20 +57,13 @@ public class ReportService {
             report.put("generatedAt", LocalDateTime.now().toString());
 
             String reportJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(report);
-            String reportS3Key = String.format("reports/%s/%s/report.json", userId, documentId);
+            String reportKey = String.format("reports/%s/%s/report.json", userId, documentId);
+            storageService.putString(reportKey, "application/json", reportJson);
+            log.info("Report generated and uploaded for document {} at {}", documentId, reportKey);
 
-            PutObjectRequest putRequest = PutObjectRequest.builder()
-                    .bucket(appProperties.getAws().getS3().getBucketName())
-                    .key(reportS3Key)
-                    .contentType("application/json")
-                    .build();
-
-            s3Client.putObject(putRequest, RequestBody.fromString(reportJson));
-            log.info("Report generated and uploaded for document {} at {}", documentId, reportS3Key);
-
-            return s3StorageService.generatePresignedGetUrl(
-                    reportS3Key,
-                    appProperties.getAws().getS3().getPresignedUrlExpiration()
+            return storageService.generatePresignedGetUrl(
+                    reportKey,
+                    appProperties.getStorage().getPresignedUrlExpiration()
             );
         } catch (Exception e) {
             log.error("Failed to generate report for document {}", documentId, e);
@@ -88,15 +75,15 @@ public class ReportService {
         documentRepository.findByIdAndUserId(documentId, userId)
                 .orElseThrow(() -> new DocumentNotFoundException("Document not found: " + documentId));
 
-        String reportS3Key = String.format("reports/%s/%s/report.json", userId, documentId);
+        String reportKey = String.format("reports/%s/%s/report.json", userId, documentId);
 
-        if (!s3StorageService.doesObjectExist(reportS3Key)) {
+        if (!storageService.doesObjectExist(reportKey)) {
             throw new DocumentNotFoundException("Report not found for document: " + documentId);
         }
 
-        return s3StorageService.generatePresignedGetUrl(
-                reportS3Key,
-                appProperties.getAws().getS3().getPresignedUrlExpiration()
+        return storageService.generatePresignedGetUrl(
+                reportKey,
+                appProperties.getStorage().getPresignedUrlExpiration()
         );
     }
 }

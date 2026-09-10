@@ -1,0 +1,33 @@
+name: Supabase Migrations
+
+on:
+  push:
+    branches: [main]
+    paths: ['src/main/resources/db/migration-supabase/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare Supabase CLI migrations from the Flyway source
+        run: |
+          mkdir -p supabase/migrations
+          cp src/main/resources/db/migration-supabase/V1__create_supabase_application_schema.sql supabase/migrations/20260830084614_create_docpipeline_application_schema.sql
+          cp src/main/resources/db/migration-supabase/V2__allow_failed_processing_jobs.sql supabase/migrations/20260830091247_allow_failed_processing_jobs.sql
+      - name: Link project
+        run: npx --yes supabase@2.116.0 link --project-ref ianwqptxwzbvwvehdmyd --password "$SUPABASE_DB_PASSWORD"
+      - name: Lint remote database
+        run: npx --yes supabase@2.116.0 db lint --linked --level error
+      - name: Apply pending migrations
+        run: npx --yes supabase@2.116.0 db push --linked

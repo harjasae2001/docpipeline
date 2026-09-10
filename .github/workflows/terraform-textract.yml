@@ -1,0 +1,40 @@
+name: Terraform Textract Staging
+
+on:
+  pull_request:
+    paths: ['infra/textract-staging/**']
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply the reviewed minimal AWS plan
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/textract-staging
+    env:
+      TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
+      TF_WORKSPACE: ${{ secrets.TF_TEXTRACT_WORKSPACE }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TEXTRACT_TERRAFORM_ROLE_ARN }}
+          aws-region: ap-south-1
+      - run: terraform fmt -check
+      - run: terraform init -input=false
+      - run: terraform validate
+      - run: terraform plan -input=false -out=tfplan
+      - if: github.event_name == 'workflow_dispatch' && inputs.apply
+        run: terraform apply -input=false -auto-approve tfplan

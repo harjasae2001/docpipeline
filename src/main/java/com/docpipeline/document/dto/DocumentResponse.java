@@ -13,5 +13,7 @@ public record DocumentResponse(
         String metadata,
         LocalDateTime uploadedAt,
         LocalDateTime processedAt,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        LocalDateTime updatedAt,
+        String errorMessage
 ) {}

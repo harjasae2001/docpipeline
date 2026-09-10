@@ -5,130 +5,188 @@ import com.docpipeline.document.Document;
 import com.docpipeline.document.DocumentRepository;
 import com.docpipeline.document.DocumentStatus;
 import com.docpipeline.monitoring.CustomMetrics;
+import com.docpipeline.storage.StorageService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.textract.TextractClient;
-import software.amazon.awssdk.services.textract.model.*;
+import software.amazon.awssdk.services.textract.model.Block;
+import software.amazon.awssdk.services.textract.model.DocumentLocation;
+import software.amazon.awssdk.services.textract.model.FeatureType;
+import software.amazon.awssdk.services.textract.model.GetDocumentAnalysisRequest;
+import software.amazon.awssdk.services.textract.model.GetDocumentAnalysisResponse;
+import software.amazon.awssdk.services.textract.model.JobStatus;
+import software.amazon.awssdk.services.textract.model.S3Object;
+import software.amazon.awssdk.services.textract.model.StartDocumentAnalysisRequest;
+import software.amazon.awssdk.services.textract.model.StartDocumentAnalysisResponse;
 
+import java.io.InputStream;
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 @Service
+@Profile("worker")
 @Slf4j
 public class TextractService {
-
     private final TextractClient textractClient;
+    private final S3Client stagingClient;
+    private final StorageService storageService;
     private final DocumentRepository documentRepository;
+    private final ProcessingJobRepository jobRepository;
     private final MetadataExtractor metadataExtractor;
-    private final CustomMetrics customMetrics;
-    private final AppProperties appProperties;
+    private final CustomMetrics metrics;
+    private final AppProperties properties;
 
     public TextractService(TextractClient textractClient,
+                           @Qualifier("textractS3Client") S3Client stagingClient,
+                           StorageService storageService,
                            DocumentRepository documentRepository,
+                           ProcessingJobRepository jobRepository,
                            MetadataExtractor metadataExtractor,
-                           CustomMetrics customMetrics,
-                           AppProperties appProperties) {
+                           CustomMetrics metrics,
+                           AppProperties properties) {
         this.textractClient = textractClient;
+        this.stagingClient = stagingClient;
+        this.storageService = storageService;
         this.documentRepository = documentRepository;
+        this.jobRepository = jobRepository;
         this.metadataExtractor = metadataExtractor;
-        this.customMetrics = customMetrics;
-        this.appProperties = appProperties;
+        this.metrics = metrics;
+        this.properties = properties;
     }
 
     @Transactional
-    public void processDocument(Document document) {
-        try {
-            document.setStatus(DocumentStatus.PROCESSING);
-            documentRepository.save(document);
+    public void start(Document document) {
+        String stagingKey = "textract/" + document.getId() + "/" + document.getFileName();
+        long size = storageService.getObjectSize(document.getStorageKey());
+        try (InputStream input = storageService.openObject(document.getStorageKey())) {
+            PutObjectRequest.Builder put = PutObjectRequest.builder()
+                    .bucket(stagingBucket()).key(stagingKey).contentType(document.getContentType());
+            if (properties.getAws().getTextractKmsKeyId() != null
+                    && !properties.getAws().getTextractKmsKeyId().isBlank()) {
+                put.serverSideEncryption("aws:kms")
+                        .ssekmsKeyId(properties.getAws().getTextractKmsKeyId());
+            }
+            stagingClient.putObject(put.build(), RequestBody.fromInputStream(input, size));
+        } catch (Exception exception) {
+            throw new IllegalStateException("Could not stage document for Textract", exception);
+        }
 
-            S3Object s3Object = S3Object.builder()
-                    .bucket(appProperties.getAws().getS3().getBucketName())
-                    .name(document.getS3Key())
-                    .build();
+        DocumentLocation location = DocumentLocation.builder()
+                .s3Object(S3Object.builder().bucket(stagingBucket()).name(stagingKey).build()).build();
+        StartDocumentAnalysisResponse response = textractClient.startDocumentAnalysis(
+                StartDocumentAnalysisRequest.builder()
+                        .documentLocation(location)
+                        .featureTypes(FeatureType.TABLES, FeatureType.FORMS)
+                        .clientRequestToken(document.getId().toString())
+                        .jobTag(document.getId().toString())
+                        .build());
+        document.setTextractStagingKey(stagingKey);
+        document.setTextractJobId(response.jobId());
+        document.setStatus(DocumentStatus.PROCESSING);
+        document.setLastError(null);
+        documentRepository.save(document);
+    }
 
-            DocumentLocation documentLocation = DocumentLocation.builder()
-                    .s3Object(s3Object)
-                    .build();
-
-            StartDocumentAnalysisRequest analysisRequest = StartDocumentAnalysisRequest.builder()
-                    .documentLocation(documentLocation)
-                    .featureTypes(FeatureType.TABLES, FeatureType.FORMS)
-                    .build();
-
-            StartDocumentAnalysisResponse response = textractClient.startDocumentAnalysis(analysisRequest);
-            document.setTextractJobId(response.jobId());
-            documentRepository.save(document);
-
-            log.info("Started Textract analysis for document {} with job ID {}", document.getId(), response.jobId());
-        } catch (TextractException e) {
-            log.error("Failed to start Textract processing for document {}", document.getId(), e);
-            document.setStatus(DocumentStatus.FAILED);
-            documentRepository.save(document);
-            customMetrics.recordProcessingFailure();
+    @Scheduled(fixedDelayString = "${app.processing.textract-poll-delay-ms:30000}")
+    @Transactional
+    public void pollPendingJobs() {
+        for (Document document : documentRepository.findByStatus(DocumentStatus.PROCESSING)) {
+            if (document.getTextractJobId() == null) {
+                continue;
+            }
+            try {
+                processResult(document);
+            } catch (Exception exception) {
+                log.error("Could not poll Textract job for document {}", document.getId(), exception);
+            }
         }
     }
 
-    @Transactional
-    public void checkAndProcessResult(Document document) {
-        if (document.getTextractJobId() == null) {
-            log.warn("No Textract job ID for document {}", document.getId());
+    private void processResult(Document document) {
+        GetDocumentAnalysisResponse first = textractClient.getDocumentAnalysis(
+                GetDocumentAnalysisRequest.builder().jobId(document.getTextractJobId()).build());
+        if (first.jobStatus() == JobStatus.IN_PROGRESS) {
+            return;
+        }
+        if (first.jobStatus() == JobStatus.FAILED || first.jobStatus() == JobStatus.PARTIAL_SUCCESS) {
+            fail(document, "Textract job ended with status " + first.jobStatusAsString());
             return;
         }
 
-        try {
-            GetDocumentAnalysisRequest request = GetDocumentAnalysisRequest.builder()
-                    .jobId(document.getTextractJobId())
-                    .build();
-
-            GetDocumentAnalysisResponse response = textractClient.getDocumentAnalysis(request);
-            JobStatus jobStatus = response.jobStatus();
-
-            if (jobStatus == JobStatus.SUCCEEDED) {
-                List<Block> blocks = response.blocks();
-                String extractedText = metadataExtractor.extractText(blocks);
-                Map<String, String> kvPairs = metadataExtractor.extractKeyValuePairs(blocks);
-                double confidence = metadataExtractor.calculateAverageConfidence(blocks);
-                String metadata = metadataExtractor.toJsonMetadata(extractedText, kvPairs, confidence);
-
-                document.setExtractedText(extractedText);
-                document.setMetadata(metadata);
-                document.setStatus(DocumentStatus.COMPLETED);
-                document.setProcessedAt(LocalDateTime.now());
-                documentRepository.save(document);
-
-                Duration processingDuration = Duration.between(
-                        document.getUploadedAt() != null ? document.getUploadedAt() : document.getCreatedAt(),
-                        document.getProcessedAt()
-                );
-                customMetrics.recordProcessingSuccess(processingDuration);
-                log.info("Document {} processed successfully", document.getId());
-
-            } else if (jobStatus == JobStatus.FAILED) {
-                document.setStatus(DocumentStatus.FAILED);
-                documentRepository.save(document);
-                customMetrics.recordProcessingFailure();
-                log.error("Textract processing failed for document {}", document.getId());
-            } else {
-                log.debug("Textract job {} still in progress for document {}", document.getTextractJobId(), document.getId());
-            }
-        } catch (TextractException e) {
-            log.error("Error checking Textract result for document {}", document.getId(), e);
+        List<Block> blocks = new ArrayList<>(first.blocks());
+        String nextToken = first.nextToken();
+        while (nextToken != null && !nextToken.isBlank()) {
+            GetDocumentAnalysisResponse page = textractClient.getDocumentAnalysis(
+                    GetDocumentAnalysisRequest.builder()
+                            .jobId(document.getTextractJobId()).nextToken(nextToken).build());
+            blocks.addAll(page.blocks());
+            nextToken = page.nextToken();
         }
+
+        String extractedText = metadataExtractor.extractText(blocks);
+        Map<String, String> pairs = metadataExtractor.extractKeyValuePairs(blocks);
+        document.setExtractedText(extractedText);
+        document.setMetadata(metadataExtractor.toJsonMetadata(
+                extractedText, pairs, metadataExtractor.calculateAverageConfidence(blocks)));
+        document.setStatus(DocumentStatus.COMPLETED);
+        document.setProcessedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        document.setLastError(null);
+        documentRepository.save(document);
+        jobRepository.findByDocumentId(document.getId()).ifPresent(job -> {
+            job.setStatus(ProcessingJobStatus.COMPLETED);
+            job.setLastError(null);
+            jobRepository.save(job);
+        });
+        deleteStaging(document);
+        metrics.recordProcessingSuccess(Duration.between(
+                document.getUploadedAt() == null ? document.getCreatedAt() : document.getUploadedAt(),
+                document.getProcessedAt()));
     }
 
-    @Scheduled(fixedDelay = 30000)
-    @Transactional
-    public void pollPendingJobs() {
-        List<Document> processingDocs = documentRepository.findByStatus(DocumentStatus.PROCESSING);
-        if (!processingDocs.isEmpty()) {
-            log.debug("Polling {} documents in PROCESSING status", processingDocs.size());
-            for (Document doc : processingDocs) {
-                checkAndProcessResult(doc);
-            }
+    private void fail(Document document, String error) {
+        document.setStatus(DocumentStatus.FAILED);
+        document.setLastError(error);
+        documentRepository.save(document);
+        jobRepository.findByDocumentId(document.getId()).ifPresent(job -> {
+            job.setStatus(ProcessingJobStatus.FAILED);
+            job.setLastError(error);
+            jobRepository.save(job);
+        });
+        try {
+            deleteStaging(document);
+        } catch (Exception cleanupException) {
+            log.warn("Could not delete failed Textract staging object for document {}", document.getId(), cleanupException);
         }
+        metrics.recordProcessingFailure();
+    }
+
+    private void deleteStaging(Document document) {
+        if (document.getTextractStagingKey() == null) {
+            return;
+        }
+        stagingClient.deleteObject(DeleteObjectRequest.builder()
+                .bucket(stagingBucket()).key(document.getTextractStagingKey()).build());
+        document.setTextractStagingKey(null);
+        documentRepository.save(document);
+    }
+
+    private String stagingBucket() {
+        String bucket = properties.getAws().getTextractStagingBucket();
+        if (bucket == null || bucket.isBlank()) {
+            throw new IllegalStateException("AWS_TEXTRACT_STAGING_BUCKET is required for worker mode");
+        }
+        return bucket;
     }
 }
